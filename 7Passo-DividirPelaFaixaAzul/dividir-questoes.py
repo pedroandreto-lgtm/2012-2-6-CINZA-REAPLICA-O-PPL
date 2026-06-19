@@ -8,172 +8,189 @@ Atualização: 03/06/2026
 from PIL import Image
 import os
 
-def encontrar_padrao_e_remover_pixel(imagem):
+def encontrar_padrao_questao(imagem):
     """
-    Encontra o padrão no meio da imagem e remove APENAS o 1 pixel ACIMA dele
-    Padrão: 7 pixels RGB(35,31,32), 4 pixels RGB(255,255,255), 2 pixels RGB(35,31,32)
-    Retorna a imagem modificada
+    Encontra padrões que indicam o início de uma questão:
+    1. Linha com "---" (traços)
+    2. Texto "# QUESTÃO" ou "# QUESTION"
+    3. Padrão de cores específico
     """
     largura, altura = imagem.size
     pixels = imagem.load()
     
-    # Padrão a ser procurado: 7 pixels cor1, 4 pixels cor2, 2 pixels cor1
-    cor1 = (35, 31, 32)  # RGB 0-255
-    cor2 = (255, 255, 255)  # RGB 0-255
-    padrao = [cor1] * 7 + [cor2] * 4 + [cor1] * 2
-    tamanho_padrao = len(padrao)  # 13 pixels no total
+    posicoes_corte = []
     
-    print(f"Procurando padrão de {tamanho_padrao} pixels no meio da imagem...")
-    
-    # Lista para armazenar as posições Y onde o padrão foi encontrado
-    posicoes_padrao = []
+    print("Procurando padrões de separação...")
     
     # Percorre a imagem de cima para baixo
     y = 0
-    while y < altura - tamanho_padrao:
-        # Verifica se há o padrão no meio da imagem
-        padrao_encontrado = True
-        pixel_meio = largura // 2  # Pixel do meio da imagem
+    while y < altura:
+        encontrou = False
         
-        for i in range(tamanho_padrao):
-            pixel = pixels[pixel_meio, y + i]
-            
-            if len(pixel) == 4:  # RGBA
+        # --- MODO 1: Procurar linha com "---" (traços) ---
+        # Verifica se tem muitos pixels escuros na linha (mais de 70% da linha)
+        pixels_escuros = 0
+        for x in range(largura):
+            pixel = pixels[x, y]
+            if len(pixel) == 4:
                 r, g, b, a = pixel
-            else:  # RGB
+            else:
                 r, g, b = pixel[:3]
             
-            # Verifica se a cor atual corresponde ao padrão esperado
-            cor_esperada = padrao[i]
-            if (r != cor_esperada[0] or g != cor_esperada[1] or b != cor_esperada[2]):
-                padrao_encontrado = False
-                break
+            # Se for escuro (menos de 100)
+            if r < 100 and g < 100 and b < 100:
+                pixels_escuros += 1
         
-        if padrao_encontrado:
-            posicoes_padrao.append(y)
-            print(f"Padrão encontrado começando em y={y}")
-            # Pula o padrão inteiro para evitar detecções múltiplas
-            y += tamanho_padrao
-        else:
-            y += 1
-    
-    if not posicoes_padrao:
-        print("Nenhum padrão encontrado na imagem!")
-        return imagem
-    
-    print(f"Encontrados {len(posicoes_padrao)} padrões")
-    
-    # Cria uma nova imagem para modificar
-    imagem_modificada = imagem.copy()
-    pixels_mod = imagem_modificada.load()
-    
-    # Para cada padrão encontrado, remove APENAS o 1 pixel ACIMA
-    for pos_y in posicoes_padrao:
-        # Remove o pixel acima do padrão (pos_y - 1)
-        if pos_y > 0:  # Garante que não está no topo da imagem
-            y_remover = pos_y - 1
+        # Se mais de 70% da linha for escura, é uma linha de separação
+        if pixels_escuros > largura * 0.7:
+            posicao_corte = y - 1
+            if posicao_corte < 0:
+                posicao_corte = 0
             
-            # Remove o pixel em toda a largura da imagem
-            for x in range(largura):
-                # Pega a cor do pixel abaixo para substituir (ou cor branca)
-                if y_remover + 1 < altura:
-                    # Pega a cor do pixel abaixo (que é o início do padrão)
-                    pixel_abaixo = pixels[x, y_remover + 1]
-                    pixels_mod[x, y_remover] = pixel_abaixo
-                else:
-                    # Se não houver pixel abaixo, usa branco
-                    pixels_mod[x, y_remover] = (255, 255, 255)
-            
-            print(f"Removido pixel na linha y={y_remover} (acima do padrão que começa em y={pos_y})")
-    
-    return imagem_modificada
-
-def dividir_imagem_por_faixas(caminho_imagem, pasta_saida):
-    """
-    Divide a imagem verticalmente cortando ANTES das faixas
-    """
-    # CRIA A PASTA DE SAÍDA PRIMEIRO
-    os.makedirs(pasta_saida, exist_ok=True)
-    
-    # Abre a imagem
-    imagem = Image.open(caminho_imagem)
-    largura, altura = imagem.size
-    
-    print(f"Imagem carregada: {largura}x{altura} pixels")
-    
-    # Remove os pixels acima dos padrões
-    imagem_modificada = encontrar_padrao_e_remover_pixel(imagem)
-    
-    # Salva a imagem modificada (opcional)
-    nome_base = os.path.splitext(os.path.basename(caminho_imagem))[0]
-    caminho_modificado = os.path.join(pasta_saida, f"{nome_base}_modificada.png")
-    imagem_modificada.save(caminho_modificado)
-    print(f"Imagem modificada salva em: {caminho_modificado}")
-    
-    # Agora vamos dividir a imagem modificada em partes
-    # Vamos usar o mesmo padrão para encontrar onde cortar
-    pixels = imagem_modificada.load()
-    
-    # Encontra todas as posições onde começa o padrão
-    posicoes_corte = []
-    padrao = [(35,31,32)] * 7 + [(255,255,255)] * 4 + [(35,31,32)] * 2
-    tamanho_padrao = len(padrao)
-    
-    y = 0
-    while y < altura - tamanho_padrao:
-        padrao_encontrado = True
-        pixel_meio = largura // 2
+            if not posicoes_corte or posicao_corte != posicoes_corte[-1]:
+                posicoes_corte.append(posicao_corte)
+                print(f"Linha escura encontrada em y={y}, cortando em y={posicao_corte}")
+                encontrou = True
+                y += 5  # Pula a linha
+                continue
         
-        for i in range(tamanho_padrao):
-            pixel = pixels[pixel_meio, y + i]
+        # --- MODO 2: Procurar por "# QUESTÃO" ou "# QUESTION" ---
+        # Verifica se a linha tem texto escuro no meio
+        if not encontrou:
+            pixel_meio = largura // 2
+            pixel = pixels[pixel_meio, y]
             
             if len(pixel) == 4:
                 r, g, b, a = pixel
             else:
                 r, g, b = pixel[:3]
             
-            cor_esperada = padrao[i]
-            if (r != cor_esperada[0] or g != cor_esperada[1] or b != cor_esperada[2]):
-                padrao_encontrado = False
-                break
+            # Se for escuro (texto)
+            if r < 80 and g < 80 and b < 80:
+                # Verifica os pixels ao redor para ver se forma um texto
+                # Vamos verificar se há um padrão de texto (pixels escuros e claros alternando)
+                tem_texto = False
+                contagem_escuros = 0
+                for x in range(largura//2 - 50, largura//2 + 50):
+                    pixel = pixels[x, y]
+                    if len(pixel) == 4:
+                        r2, g2, b2, a = pixel
+                    else:
+                        r2, g2, b2 = pixel[:3]
+                    
+                    if r2 < 80 and g2 < 80 and b2 < 80:
+                        contagem_escuros += 1
+                
+                # Se tem muitos pixels escuros consecutivos, é texto
+                if contagem_escuros > 20:
+                    # Verifica se tem "QUESTION" ou "QUESTÃO" nas proximidades
+                    # Como não temos OCR, vamos usar uma heurística
+                    posicao_corte = y - 1
+                    if posicao_corte < 0:
+                        posicao_corte = 0
+                    
+                    if not posicoes_corte or posicao_corte != posicoes_corte[-1]:
+                        posicoes_corte.append(posicao_corte)
+                        print(f"Possível texto de questão encontrado em y={y}, cortando em y={posicao_corte}")
+                        encontrou = True
+                        y += 20  # Pula o texto
+                        continue
         
-        if padrao_encontrado:
-            # Corta 1 pixel ANTES do padrão (que agora foi removido)
-            posicao_corte = y - 1
-            if posicao_corte < 0:
-                posicao_corte = 0
-            posicoes_corte.append(posicao_corte)
-            print(f"Cortando em y={posicao_corte} (antes do padrão em y={y})")
-            y += tamanho_padrao
-        else:
-            y += 1
+        y += 1
+        
+        # Mostra progresso a cada 5000 linhas
+        if y % 5000 == 0:
+            print(f"Progresso: {y*100//altura}%")
     
-    # Adiciona a posição final
-    posicoes_corte.append(altura)
+    # Remove duplicatas e ordena
+    posicoes_corte = sorted(list(set(posicoes_corte)))
+    
+    return posicoes_corte
+
+def dividir_imagem_por_faixas(caminho_imagem, pasta_saida):
+    """
+    Divide a imagem verticalmente cortando ANTES das linhas de separação
+    """
+    # Abre a imagem
+    print("Abrindo imagem...")
+    imagem = Image.open(caminho_imagem)
+    largura, altura = imagem.size
+    
+    print(f"Imagem carregada: {largura}x{altura} pixels")
+    
+    # Encontra as posições das linhas de separação
+    posicoes_corte = encontrar_padrao_questao(imagem)
+    
+    if not posicoes_corte:
+        print("Nenhum padrão de separação encontrado na imagem!")
+        print("Tentando método alternativo: procurar por linhas com muitos pixels escuros...")
+        
+        # Método alternativo: procura qualquer linha com muitos pixels escuros
+        pixels = imagem.load()
+        for y in range(altura):
+            pixels_escuros = 0
+            for x in range(largura):
+                pixel = pixels[x, y]
+                if len(pixel) == 4:
+                    r, g, b, a = pixel
+                else:
+                    r, g, b = pixel[:3]
+                
+                if r < 100 and g < 100 and b < 100:
+                    pixels_escuros += 1
+            
+            if pixels_escuros > largura * 0.6:
+                posicao_corte = y - 1
+                if posicao_corte < 0:
+                    posicao_corte = 0
+                
+                if not posicoes_corte or posicao_corte != posicoes_corte[-1]:
+                    posicoes_corte.append(posicao_corte)
+                    print(f"Linha escura encontrada em y={y}")
+        
+        if not posicoes_corte:
+            print("❌ Nenhuma separação encontrada!")
+            return
+    
+    print(f"\n✅ Encontradas {len(posicoes_corte)} separações")
+    
+    # Cria a pasta de saída se não existir
+    os.makedirs(pasta_saida, exist_ok=True)
+    
+    # Adiciona o topo e o final da imagem
+    posicoes_corte_completas = [0] + posicoes_corte + [altura]
     
     # Corta as seções da imagem
-    for i in range(len(posicoes_corte) - 1):
-        inicio = posicoes_corte[i]
-        fim = posicoes_corte[i + 1]
+    for i in range(len(posicoes_corte_completas) - 1):
+        inicio = posicoes_corte_completas[i]
+        fim = posicoes_corte_completas[i + 1]
+        
+        # Pula seções vazias ou muito pequenas
+        if fim - inicio < 50:
+            continue
         
         # Corta a seção
         area_corte = (0, inicio, largura, fim)
-        secao = imagem_modificada.crop(area_corte)
+        secao = imagem.crop(area_corte)
         
         # Salva a imagem cortada
-        nome_arquivo = f"parte_{i+1:03d}.png"
+        nome_arquivo = f"questao_{i+1:03d}.png"
         caminho_completo = os.path.join(pasta_saida, nome_arquivo)
         secao.save(caminho_completo)
         print(f"Salvo: {caminho_completo} ({secao.width}x{secao.height}px)")
 
 if __name__ == "__main__":
+    # ESCOLHA QUAL IMAGEM PROCESSAR
+    
+    # Opção 1: Colunas concatenadas
     caminho_imagem = "colunas_concatenadas_verticalmente.png"
     pasta_saida = "questoes_colunas"
 
+    # Opção 2: Página inteira
     #caminho_imagem = "./inteiras/pagina_enem_15.png"
     #pasta_saida = "pagina_15"
     
     # Executa a divisão
     dividir_imagem_por_faixas(caminho_imagem, pasta_saida)
     
-    print("Divisão concluída!")
+    print("\n✅ Divisão concluída!")
