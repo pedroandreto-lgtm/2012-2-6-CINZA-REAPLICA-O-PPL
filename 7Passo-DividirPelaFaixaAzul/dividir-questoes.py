@@ -3,194 +3,206 @@ Propósito: Dividir as questões por padrão. Observa-se que ao início de cada 
 Autor: Alexandre Nassar de Peder
 Criação: 02/10/2025
 Atualização: 03/06/2026
+
+OBS1: puxe a imagem "colunas_concatenadas_verticalmente.png" do passo 6 para essa pasta do passo 7, e as imagens de páginas inteiras da pasta "inteiras" do passo 5 para essa pasta do passo 7
+OBS2: esse código vai percorrer a imagem de cima pra baixo, sempre analisando o pixel central da imagem, para encontrar a faixa que divide as questões. Quando encontrar a faixa, ele vai cortar a imagem ANTES da faixa, e depois pular a faixa para continuar procurando a próxima questão
+OBS3: primeiro você vai rodar esse código para cortar a imagem de colunas concatenadas, depois você vai rodar para cada página inteira
+OBS4: atualize as linhas 127 e 128 para recortar a imagem de colunas concatenadas, depois atualize para recortar cada página inteira. Atualize o nome da pasta de saída também
+OBS5: o padrão atual é: 7px rgb(35,31,32), 4px rgb(255,255,255), 2px rgb(35,31,32) com margem de erro de 2px
 """
 
 from PIL import Image
 import os
 
-def encontrar_padrao_questao(imagem):
+def encontrar_padrao_faixa(imagem, tolerancia=5):
     """
-    Encontra padrões que indicam o início de uma questão:
-    1. Linha com "---" (traços)
-    2. Texto "# QUESTÃO" ou "# QUESTION"
-    3. Padrão de cores específico
+    Encontra posições onde há uma faixa horizontal com o padrão específico:
+    7px rgb(35,31,32), 4px rgb(255,255,255), 2px rgb(35,31,32)
+    Com margem de erro de 2px em cada faixa
     """
     largura, altura = imagem.size
     pixels = imagem.load()
     
     posicoes_corte = []
     
-    print("Procurando padrões de separação...")
+    # Padrão esperado
+    cor_escura = (35, 31, 32)
+    cor_branca = (255, 255, 255)
+    
+    # Tamanhos esperados com margem de erro de 2px
+    # Faixa escura 1: 7px ± 2px = 5-9px
+    # Faixa branca: 4px ± 2px = 2-6px  
+    # Faixa escura 2: 2px ± 2px = 0-4px
+    # Total: 7-19px
     
     # Percorre a imagem de cima para baixo
     y = 0
-    while y < altura:
-        encontrou = False
+    while y < altura - 20:  # Deixar espaço mínimo para o padrão completo
+        # Pega o pixel central (metade da largura)
+        x_central = largura // 2
+        pixel = pixels[x_central, y]
         
-        # --- MODO 1: Procurar linha com "---" (traços) ---
-        # Verifica se tem muitos pixels escuros na linha (mais de 70% da linha)
-        pixels_escuros = 0
-        for x in range(largura):
-            pixel = pixels[x, y]
-            if len(pixel) == 4:
-                r, g, b, a = pixel
-            else:
-                r, g, b = pixel[:3]
-            
-            # Se for escuro (menos de 100)
-            if r < 100 and g < 100 and b < 100:
-                pixels_escuros += 1
+        # Converte para RGB se necessário
+        if len(pixel) == 4:  # RGBA
+            r, g, b, a = pixel
+        else:  # RGB
+            r, g, b = pixel[:3]
         
-        # Se mais de 70% da linha for escura, é uma linha de separação
-        if pixels_escuros > largura * 0.7:
-            posicao_corte = y - 1
-            if posicao_corte < 0:
-                posicao_corte = 0
+        # Verifica se o pixel atual é da cor escura (início do padrão)
+        if (abs(r - cor_escura[0]) <= tolerancia and 
+            abs(g - cor_escura[1]) <= tolerancia and 
+            abs(b - cor_escura[2]) <= tolerancia):
             
-            if not posicoes_corte or posicao_corte != posicoes_corte[-1]:
+            # Verifica se o padrão completo está presente
+            padrao_valido = True
+            posicao_atual = y
+            
+            # 1ª faixa escura: 7px ± 2px (5-9px)
+            qtd_escura1 = 0
+            while posicao_atual < altura and qtd_escura1 < 10:  # máximo 10px
+                pixel_check = pixels[x_central, posicao_atual]
+                if len(pixel_check) == 4:
+                    r, g, b, a = pixel_check
+                else:
+                    r, g, b = pixel_check[:3]
+                
+                if (abs(r - cor_escura[0]) <= tolerancia and 
+                    abs(g - cor_escura[1]) <= tolerancia and 
+                    abs(b - cor_escura[2]) <= tolerancia):
+                    qtd_escura1 += 1
+                    posicao_atual += 1
+                else:
+                    break
+            
+            # Verifica se a quantidade está dentro da margem de erro (5-9px)
+            if qtd_escura1 < 5 or qtd_escura1 > 9:
+                padrao_valido = False
+            
+            # Faixa branca: 4px ± 2px (2-6px)
+            if padrao_valido:
+                qtd_branca = 0
+                while posicao_atual < altura and qtd_branca < 7:  # máximo 7px
+                    pixel_check = pixels[x_central, posicao_atual]
+                    if len(pixel_check) == 4:
+                        r, g, b, a = pixel_check
+                    else:
+                        r, g, b = pixel_check[:3]
+                    
+                    if (abs(r - cor_branca[0]) <= tolerancia and 
+                        abs(g - cor_branca[1]) <= tolerancia and 
+                        abs(b - cor_branca[2]) <= tolerancia):
+                        qtd_branca += 1
+                        posicao_atual += 1
+                    else:
+                        break
+                
+                # Verifica se a quantidade está dentro da margem de erro (2-6px)
+                if qtd_branca < 2 or qtd_branca > 6:
+                    padrao_valido = False
+            
+            # 2ª faixa escura: 2px ± 2px (0-4px)
+            if padrao_valido:
+                qtd_escura2 = 0
+                while posicao_atual < altura and qtd_escura2 < 5:  # máximo 5px
+                    pixel_check = pixels[x_central, posicao_atual]
+                    if len(pixel_check) == 4:
+                        r, g, b, a = pixel_check
+                    else:
+                        r, g, b = pixel_check[:3]
+                    
+                    if (abs(r - cor_escura[0]) <= tolerancia and 
+                        abs(g - cor_escura[1]) <= tolerancia and 
+                        abs(b - cor_escura[2]) <= tolerancia):
+                        qtd_escura2 += 1
+                        posicao_atual += 1
+                    else:
+                        break
+                
+                # Verifica se a quantidade está dentro da margem de erro (0-4px)
+                if qtd_escura2 < 0 or qtd_escura2 > 4:
+                    padrao_valido = False
+            
+            # Se o padrão foi validado, registra a posição de corte
+            if padrao_valido:
+                # Pula alguns pixels antes do padrão para garantir que vamos antes da faixa
+                # A faixa começa em y, então cortamos em y-5 para garantir que não pegamos
+                posicao_corte = max(0, y - 35)
                 posicoes_corte.append(posicao_corte)
-                print(f"Linha escura encontrada em y={y}, cortando em y={posicao_corte}")
-                encontrou = True
-                y += 5  # Pula a linha
+                print(f"Padrão encontrado começando em y={y}, cortando em y={posicao_corte}")
+                print(f"  -> 1ª escura: {qtd_escura1}px, branca: {qtd_branca}px, 2ª escura: {qtd_escura2}px")
+                
+                # Pula a faixa inteira + alguns pixels extras para evitar detecções múltiplas
+                y = posicao_atual + 10
                 continue
         
-        # --- MODO 2: Procurar por "# QUESTÃO" ou "# QUESTION" ---
-        # Verifica se a linha tem texto escuro no meio
-        if not encontrou:
-            pixel_meio = largura // 2
-            pixel = pixels[pixel_meio, y]
-            
-            if len(pixel) == 4:
-                r, g, b, a = pixel
-            else:
-                r, g, b = pixel[:3]
-            
-            # Se for escuro (texto)
-            if r < 80 and g < 80 and b < 80:
-                # Verifica os pixels ao redor para ver se forma um texto
-                # Vamos verificar se há um padrão de texto (pixels escuros e claros alternando)
-                tem_texto = False
-                contagem_escuros = 0
-                for x in range(largura//2 - 50, largura//2 + 50):
-                    pixel = pixels[x, y]
-                    if len(pixel) == 4:
-                        r2, g2, b2, a = pixel
-                    else:
-                        r2, g2, b2 = pixel[:3]
-                    
-                    if r2 < 80 and g2 < 80 and b2 < 80:
-                        contagem_escuros += 1
-                
-                # Se tem muitos pixels escuros consecutivos, é texto
-                if contagem_escuros > 20:
-                    # Verifica se tem "QUESTION" ou "QUESTÃO" nas proximidades
-                    # Como não temos OCR, vamos usar uma heurística
-                    posicao_corte = y - 1
-                    if posicao_corte < 0:
-                        posicao_corte = 0
-                    
-                    if not posicoes_corte or posicao_corte != posicoes_corte[-1]:
-                        posicoes_corte.append(posicao_corte)
-                        print(f"Possível texto de questão encontrado em y={y}, cortando em y={posicao_corte}")
-                        encontrou = True
-                        y += 20  # Pula o texto
-                        continue
-        
         y += 1
-        
-        # Mostra progresso a cada 5000 linhas
-        if y % 5000 == 0:
-            print(f"Progresso: {y*100//altura}%")
-    
-    # Remove duplicatas e ordena
-    posicoes_corte = sorted(list(set(posicoes_corte)))
     
     return posicoes_corte
 
 def dividir_imagem_por_faixas(caminho_imagem, pasta_saida):
     """
-    Divide a imagem verticalmente cortando ANTES das linhas de separação
+    Divide a imagem verticalmente cortando ANTES das faixas
     """
     # Abre a imagem
-    print("Abrindo imagem...")
     imagem = Image.open(caminho_imagem)
     largura, altura = imagem.size
     
     print(f"Imagem carregada: {largura}x{altura} pixels")
+    print(f"Analisando pixel central em x={largura//2}")
     
-    # Encontra as posições das linhas de separação
-    posicoes_corte = encontrar_padrao_questao(imagem)
+    # Encontra as posições das faixas
+    posicoes_corte = encontrar_padrao_faixa(imagem)
     
     if not posicoes_corte:
-        print("Nenhum padrão de separação encontrado na imagem!")
-        print("Tentando método alternativo: procurar por linhas com muitos pixels escuros...")
-        
-        # Método alternativo: procura qualquer linha com muitos pixels escuros
-        pixels = imagem.load()
-        for y in range(altura):
-            pixels_escuros = 0
-            for x in range(largura):
-                pixel = pixels[x, y]
-                if len(pixel) == 4:
-                    r, g, b, a = pixel
-                else:
-                    r, g, b = pixel[:3]
-                
-                if r < 100 and g < 100 and b < 100:
-                    pixels_escuros += 1
-            
-            if pixels_escuros > largura * 0.6:
-                posicao_corte = y - 1
-                if posicao_corte < 0:
-                    posicao_corte = 0
-                
-                if not posicoes_corte or posicao_corte != posicoes_corte[-1]:
-                    posicoes_corte.append(posicao_corte)
-                    print(f"Linha escura encontrada em y={y}")
-        
-        if not posicoes_corte:
-            print("❌ Nenhuma separação encontrada!")
-            return
+        print("Nenhuma faixa com o padrão encontrado na imagem!")
+        return
     
-    print(f"\n✅ Encontradas {len(posicoes_corte)} separações")
+    print(f"Encontradas {len(posicoes_corte)} faixas para corte")
     
     # Cria a pasta de saída se não existir
     os.makedirs(pasta_saida, exist_ok=True)
     
-    # Adiciona o topo e o final da imagem
-    posicoes_corte_completas = [0] + posicoes_corte + [altura]
-    
     # Corta as seções da imagem
-    for i in range(len(posicoes_corte_completas) - 1):
-        inicio = posicoes_corte_completas[i]
-        fim = posicoes_corte_completas[i + 1]
-        
-        # Pula seções vazias ou muito pequenas
-        if fim - inicio < 50:
+    posicao_anterior = 0
+    
+    for i, posicao_corte in enumerate(posicoes_corte):
+        # Garantir que a posição de corte é válida
+        if posicao_corte <= posicao_anterior:
             continue
-        
-        # Corta a seção
-        area_corte = (0, inicio, largura, fim)
+            
+        # Corta a seção ANTES da faixa (do início anterior até o início da faixa)
+        area_corte = (0, posicao_anterior, largura, posicao_corte)
         secao = imagem.crop(area_corte)
         
         # Salva a imagem cortada
-        nome_arquivo = f"questao_{i+1:03d}.png"
+        nome_arquivo = f"parte_{i+1:03d}.png"
+        caminho_completo = os.path.join(pasta_saida, nome_arquivo)
+        secao.save(caminho_completo)
+        print(f"Salvo: {caminho_completo} ({secao.width}x{secao.height}px)")
+        
+        # A próxima seção começa após o final desta faixa
+        posicao_anterior = posicao_corte + 20  # Pula a faixa com margem extra
+    
+    # Corta a seção final (após a última faixa)
+    if posicao_anterior < altura:
+        area_corte = (0, posicao_anterior, largura, altura)
+        secao = imagem.crop(area_corte)
+        
+        nome_arquivo = f"parte_{len(posicoes_corte)+1:03d}.png"
         caminho_completo = os.path.join(pasta_saida, nome_arquivo)
         secao.save(caminho_completo)
         print(f"Salvo: {caminho_completo} ({secao.width}x{secao.height}px)")
 
 if __name__ == "__main__":
-    # ESCOLHA QUAL IMAGEM PROCESSAR
-    
-    # Opção 1: Colunas concatenadas
+    # Para colunas concatenadas
     caminho_imagem = "colunas_concatenadas_verticalmente.png"
     pasta_saida = "questoes_colunas"
-
-    # Opção 2: Página inteira
-    #caminho_imagem = "./inteiras/pagina_enem_15.png"
-    #pasta_saida = "pagina_15"
+    
+    # Para páginas inteiras (descomente as linhas abaixo e comente as de cima)
+    # caminho_imagem = "./inteiras/pagina_enem_15.png"
+    # pasta_saida = "pagina_15"
     
     # Executa a divisão
     dividir_imagem_por_faixas(caminho_imagem, pasta_saida)
     
-    print("\n✅ Divisão concluída!")
+    print("Divisão concluída!")
