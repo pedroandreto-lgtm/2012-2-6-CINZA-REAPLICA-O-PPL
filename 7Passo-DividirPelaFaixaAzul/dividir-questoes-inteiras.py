@@ -6,149 +6,163 @@ Atualização: 03/06/2026
 
 OBS: 
 - As imagens estão na pasta "inteiras"
-- O padrão de divisão é o mesmo das colunas concatenadas
-- Verifica no pixel x=390
+- Padrão: 7px rgb(35,31,32), 4px rgb(255,255,255), 2px rgb(35,31,32)
+- Procura o padrão em várias posições x
 - Corta 30px acima do padrão encontrado
 - Salva na pasta "inteiras-questoes"
 """
 
 from PIL import Image
 import os
-import shutil
 
-def encontrar_padrao_faixa(imagem, tolerancia=15):
+def encontrar_padrao_faixa(imagem, tolerancia=10):
     """
     Encontra posições onde há uma faixa horizontal com o padrão:
-    7px rgb(64,193,243), 4px rgb(179,230,250), 2px rgb(64,193,243)
-    Verifica no pixel x=390
+    7px rgb(35,31,32), 4px rgb(255,255,255), 2px rgb(35,31,32)
+    Procura em várias posições x para encontrar onde está o padrão
     """
     largura, altura = imagem.size
     pixels = imagem.load()
     
     posicoes_corte = []
     
-    # Padrão esperado (mesmo das colunas concatenadas)
-    cor_azul_escura = (64, 193, 243)
-    cor_azul_clara = (179, 230, 250)
+    # Padrão correto
+    cor_escura = (35, 31, 32)
+    cor_branca = (255, 255, 255)
     
-    # Posição fixa para verificar (x=390)
-    x_verificacao = 390
+    # Testar em várias posições x (da esquerda para a direita)
+    posicoes_x = list(range(50, min(largura - 50, 800), 50))
     
-    # Se a imagem for menor que 390, ajusta
-    if x_verificacao >= largura:
-        x_verificacao = largura - 10
-        print(f"⚠️  Ajustando x para {x_verificacao} (largura da imagem: {largura})")
-    
-    print(f"Analisando padrão no pixel x={x_verificacao}")
+    print(f"Procurando padrão em {len(posicoes_x)} posições diferentes...")
+    print(f"Posições x testadas: {posicoes_x}")
     print(f"Dimensões da imagem: {largura}x{altura}")
+    print("=" * 60)
     
-    y = 0
-    encontrados = 0
+    padroes_por_x = {}
+    melhor_x = None
+    mais_faixas = 0
     
-    while y < altura - 20:
-        # Pega o pixel na posição x_verificacao
-        pixel = pixels[x_verificacao, y]
+    for x_verificacao in posicoes_x:
+        encontrados_nesse_x = 0
+        y = 0
         
-        # Converte para RGB se necessário
-        if len(pixel) == 4:  # RGBA
-            r, g, b, a = pixel
-        else:  # RGB
-            r, g, b = pixel[:3]
-        
-        # Verifica se o pixel atual é da cor azul escura (início do padrão)
-        if (abs(r - cor_azul_escura[0]) <= tolerancia and 
-            abs(g - cor_azul_escura[1]) <= tolerancia and 
-            abs(b - cor_azul_escura[2]) <= tolerancia):
+        while y < altura - 20:
+            # Pega o pixel na posição x_verificacao
+            pixel = pixels[x_verificacao, y]
             
-            # Verifica se o padrão completo está presente
-            padrao_valido = True
-            posicao_atual = y
+            # Converte para RGB se necessário
+            if len(pixel) == 4:  # RGBA
+                r, g, b, a = pixel
+            else:  # RGB
+                r, g, b = pixel[:3]
             
-            # 1ª faixa azul escura: 7px ± 2px (5-9px)
-            qtd_escura1 = 0
-            while posicao_atual < altura and qtd_escura1 < 10:
-                pixel_check = pixels[x_verificacao, posicao_atual]
-                if len(pixel_check) == 4:
-                    r, g, b, a = pixel_check
-                else:
-                    r, g, b = pixel_check[:3]
+            # Verifica se o pixel atual é da cor escura (início do padrão)
+            if (abs(r - cor_escura[0]) <= tolerancia and 
+                abs(g - cor_escura[1]) <= tolerancia and 
+                abs(b - cor_escura[2]) <= tolerancia):
                 
-                if (abs(r - cor_azul_escura[0]) <= tolerancia and 
-                    abs(g - cor_azul_escura[1]) <= tolerancia and 
-                    abs(b - cor_azul_escura[2]) <= tolerancia):
-                    qtd_escura1 += 1
-                    posicao_atual += 1
-                else:
-                    break
-            
-            # Verifica se a quantidade está dentro da margem de erro (5-9px)
-            if qtd_escura1 < 5 or qtd_escura1 > 9:
-                padrao_valido = False
-            
-            # Faixa azul clara: 4px ± 2px (2-6px)
-            if padrao_valido:
-                qtd_clara = 0
-                while posicao_atual < altura and qtd_clara < 7:
+                # Verifica se o padrão completo está presente
+                padrao_valido = True
+                posicao_atual = y
+                
+                # 1ª faixa escura: 7px ± 2px (5-9px)
+                qtd_escura1 = 0
+                while posicao_atual < altura and qtd_escura1 < 10:
                     pixel_check = pixels[x_verificacao, posicao_atual]
                     if len(pixel_check) == 4:
                         r, g, b, a = pixel_check
                     else:
                         r, g, b = pixel_check[:3]
                     
-                    if (abs(r - cor_azul_clara[0]) <= tolerancia and 
-                        abs(g - cor_azul_clara[1]) <= tolerancia and 
-                        abs(b - cor_azul_clara[2]) <= tolerancia):
-                        qtd_clara += 1
+                    if (abs(r - cor_escura[0]) <= tolerancia and 
+                        abs(g - cor_escura[1]) <= tolerancia and 
+                        abs(b - cor_escura[2]) <= tolerancia):
+                        qtd_escura1 += 1
                         posicao_atual += 1
                     else:
                         break
                 
-                # Verifica se a quantidade está dentro da margem de erro (2-6px)
-                if qtd_clara < 2 or qtd_clara > 6:
+                if qtd_escura1 < 5 or qtd_escura1 > 9:
                     padrao_valido = False
-            
-            # 2ª faixa azul escura: 2px ± 2px (0-4px)
-            if padrao_valido:
-                qtd_escura2 = 0
-                while posicao_atual < altura and qtd_escura2 < 5:
-                    pixel_check = pixels[x_verificacao, posicao_atual]
-                    if len(pixel_check) == 4:
-                        r, g, b, a = pixel_check
-                    else:
-                        r, g, b = pixel_check[:3]
+                
+                # Faixa branca: 4px ± 2px (2-6px)
+                if padrao_valido:
+                    qtd_branca = 0
+                    while posicao_atual < altura and qtd_branca < 7:
+                        pixel_check = pixels[x_verificacao, posicao_atual]
+                        if len(pixel_check) == 4:
+                            r, g, b, a = pixel_check
+                        else:
+                            r, g, b = pixel_check[:3]
+                        
+                        if (abs(r - cor_branca[0]) <= tolerancia and 
+                            abs(g - cor_branca[1]) <= tolerancia and 
+                            abs(b - cor_branca[2]) <= tolerancia):
+                            qtd_branca += 1
+                            posicao_atual += 1
+                        else:
+                            break
                     
-                    if (abs(r - cor_azul_escura[0]) <= tolerancia and 
-                        abs(g - cor_azul_escura[1]) <= tolerancia and 
-                        abs(b - cor_azul_escura[2]) <= tolerancia):
-                        qtd_escura2 += 1
-                        posicao_atual += 1
-                    else:
-                        break
+                    if qtd_branca < 2 or qtd_branca > 6:
+                        padrao_valido = False
                 
-                # Verifica se a quantidade está dentro da margem de erro (0-4px)
-                if qtd_escura2 < 0 or qtd_escura2 > 4:
-                    padrao_valido = False
+                # 2ª faixa escura: 2px ± 2px (0-4px)
+                if padrao_valido:
+                    qtd_escura2 = 0
+                    while posicao_atual < altura and qtd_escura2 < 5:
+                        pixel_check = pixels[x_verificacao, posicao_atual]
+                        if len(pixel_check) == 4:
+                            r, g, b, a = pixel_check
+                        else:
+                            r, g, b = pixel_check[:3]
+                        
+                        if (abs(r - cor_escura[0]) <= tolerancia and 
+                            abs(g - cor_escura[1]) <= tolerancia and 
+                            abs(b - cor_escura[2]) <= tolerancia):
+                            qtd_escura2 += 1
+                            posicao_atual += 1
+                        else:
+                            break
+                    
+                    if qtd_escura2 < 0 or qtd_escura2 > 4:
+                        padrao_valido = False
+                
+                if padrao_valido:
+                    posicao_corte = max(0, y - 40)
+                    
+                    # Verifica se já não temos essa posição (evita duplicatas)
+                    if not posicoes_corte or abs(posicao_corte - posicoes_corte[-1]) > 20:
+                        posicoes_corte.append(posicao_corte)
+                        encontrados_nesse_x += 1
+                        print(f"  ✅ x={x_verificacao}: Padrão em y={y}, cortando em y={posicao_corte}")
+                        print(f"     -> escura1: {qtd_escura1}px, branca: {qtd_branca}px, escura2: {qtd_escura2}px")
+                    
+                    y = posicao_atual + 10
+                    continue
             
-            # Se o padrão foi validado, registra a posição de corte
-            if padrao_valido:
-                # Corta 30px ACIMA do início do padrão
-                posicao_corte = max(0, y - 30)
-                
-                # Verifica se já não temos essa posição (evita duplicatas)
-                if not posicoes_corte or abs(posicao_corte - posicoes_corte[-1]) > 20:
-                    posicoes_corte.append(posicao_corte)
-                    encontrados += 1
-                    print(f"✅ Padrão encontrado em y={y}, cortando em y={posicao_corte} (30px acima)")
-                    print(f"   -> 1ª azul escura: {qtd_escura1}px, azul clara: {qtd_clara}px, 2ª azul escura: {qtd_escura2}px")
-                
-                # Pula a faixa inteira
-                y = posicao_atual + 10
-                continue
+            y += 1
         
-        y += 1
+        if encontrados_nesse_x > 0:
+            padroes_por_x[x_verificacao] = encontrados_nesse_x
+            if encontrados_nesse_x > mais_faixas:
+                mais_faixas = encontrados_nesse_x
+                melhor_x = x_verificacao
     
-    print(f"\nTotal de faixas encontradas: {encontrados}")
-    return posicoes_corte
+    # Mostra o resumo
+    print("=" * 60)
+    if padroes_por_x:
+        print(f"✅ Padrão encontrado nas posições x: {list(padroes_por_x.keys())}")
+        print(f"🎯 Melhor posição: x={melhor_x} com {mais_faixas} faixas encontradas")
+        print(f"📊 Total de faixas encontradas: {len(posicoes_corte)}")
+    else:
+        print("❌ Padrão NÃO encontrado em nenhuma posição x testada!")
+        print("\n🔍 Sugestões:")
+        print("  1. Verifique se as cores RGB(35,31,32) e RGB(255,255,255) estão corretas")
+        print("  2. Aumente a tolerância (atualmente 10)")
+        print("  3. Verifique se o padrão está realmente na imagem")
+        print("  4. Tente posições x diferentes (modifique a lista posicoes_x)")
+    
+    return posicoes_corte, melhor_x
 
 def dividir_imagem_por_faixas(caminho_imagem, pasta_saida):
     """
@@ -171,17 +185,14 @@ def dividir_imagem_por_faixas(caminho_imagem, pasta_saida):
     print(f"{'='*60}")
     
     # Encontra as posições das faixas
-    posicoes_corte = encontrar_padrao_faixa(imagem)
+    posicoes_corte, x_encontrado = encontrar_padrao_faixa(imagem)
     
     if not posicoes_corte:
         print("\n❌ NENHUMA FAIXA ENCONTRADA!")
-        print("Verifique se:")
-        print("  1. A imagem tem o padrão de cores RGB(64,193,243) e RGB(179,230,250)")
-        print("  2. A posição x=390 é onde está o padrão")
-        print("  3. A imagem tem pelo menos 400 pixels de largura")
+        print("O padrão RGB(35,31,32) e RGB(255,255,255) não foi encontrado.")
         return False
     
-    print(f"\n✅ Encontradas {len(posicoes_corte)} faixas para corte")
+    print(f"\n✅ Encontradas {len(posicoes_corte)} faixas para corte em x={x_encontrado}")
     
     # Cria a pasta de saída se não existir
     os.makedirs(pasta_saida, exist_ok=True)
@@ -192,25 +203,21 @@ def dividir_imagem_por_faixas(caminho_imagem, pasta_saida):
     questoes_cortadas = 0
     
     for i, posicao_corte in enumerate(posicoes_corte):
-        # Garantir que a posição de corte é válida
         if posicao_corte <= posicao_anterior:
             continue
             
-        # Corta a seção ANTES da faixa
         area_corte = (0, posicao_anterior, largura, posicao_corte)
         secao = imagem.crop(area_corte)
         
-        # Salva a imagem cortada
         nome_questao = f"questao_{i+1:03d}.png"
         caminho_completo = os.path.join(pasta_saida, nome_questao)
         secao.save(caminho_completo)
         questoes_cortadas += 1
         print(f"💾 Salvo: {nome_questao} ({secao.width}x{secao.height}px)")
         
-        # A próxima seção começa após o final desta faixa
-        posicao_anterior = posicao_corte + 30  # Pula a faixa + 30px de margem
+        posicao_anterior = posicao_corte + 30
     
-    # Corta a seção final (após a última faixa)
+    # Corta a seção final
     if posicao_anterior < altura:
         area_corte = (0, posicao_anterior, largura, altura)
         secao = imagem.crop(area_corte)
@@ -231,15 +238,12 @@ def processar_todas_imagens():
     pasta_origem = "inteiras"
     pasta_destino = "inteiras-questoes"
     
-    # Verifica se a pasta de origem existe
     if not os.path.exists(pasta_origem):
         print(f"❌ ERRO: Pasta '{pasta_origem}' não encontrada!")
         return
     
-    # Cria a pasta de destino
     os.makedirs(pasta_destino, exist_ok=True)
     
-    # Lista todas as imagens PNG na pasta
     imagens = [f for f in os.listdir(pasta_origem) if f.lower().endswith('.png')]
     
     if not imagens:
@@ -250,7 +254,8 @@ def processar_todas_imagens():
     print("🎯 DIVISOR DE QUESTÕES - IMAGENS INTEIRAS")
     print(f"📁 Pasta origem: {pasta_origem}")
     print(f"📁 Pasta destino: {pasta_destino}")
-    print(f"📌 Verificando padrão em x=390")
+    print(f"🔍 Padrão: 7px RGB(35,31,32) + 4px RGB(255,255,255) + 2px RGB(35,31,32)")
+    print(f"🔍 Procurando padrão em várias posições x")
     print(f"✂️  Cortando 30px acima do padrão")
     print("="*60)
     
@@ -268,8 +273,6 @@ def processar_todas_imagens():
         
         if dividir_imagem_por_faixas(caminho_origem, pasta_saida):
             imagens_processadas += 1
-            
-            # Conta quantas questões foram geradas
             if os.path.exists(pasta_saida):
                 questoes = [f for f in os.listdir(pasta_saida) if f.startswith('questao_')]
                 questoes_totais += len(questoes)
@@ -283,7 +286,6 @@ def processar_todas_imagens():
     print(f"{'='*60}")
 
 if __name__ == "__main__":
-    # Processa todas as imagens da pasta "inteiras"
     processar_todas_imagens()
     
     print("\n" + "="*60)
